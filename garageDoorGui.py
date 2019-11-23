@@ -1,11 +1,43 @@
+#!/usr/bin/python3
 import tkinter as tk
 from tkinter import ttk
+import Adafruit_DHT
+import time
+import RPi.GPIO as GPIO
+
+sensor = Adafruit_DHT.DHT22
+
+#Pin that connects to the temperature humididty sensor
+tempHumidityPin = 4
+
+#this is GPIO18
+garageDoorPin = 12
+
+#This is GPIO17
+buzzerPin = 11
+
+temperature  = 0.0
+humidity = 0.0
 
 def getTemperature():
-    return 24.7
+    global temperature
+    global humidity
+    humid, temp = Adafruit_DHT.read_retry(sensor, tempHumidityPin)
+    temperature = round(temp, 2)
+    humidity = round(humid, 2)
+    if humidity is not None and temperature is not None:
+        print('Temperature = {0:0.1f}*C  Humidity = {1:0.1f}%'.format(temperature, humidity))
+        return temperature
+    else:
+        print('Failed to get reading. Try again!')
+        temperature = round(0.0, 2)
+        humidity = round(0.0, 2)
+        return temperature
+    
 
 def getHumindity():
-    return 37.5
+    global humidity
+    return humidity
 
 def getGassLevel():
     return 93.2
@@ -15,11 +47,54 @@ def garageDoorStatus():
 
 def getAlarmStatus():
     return 'Inactive'
+    
+def setupBoard():
+    #Suppress warning
+    GPIO.setwarnings(False)
+    #Use physical pin numbering
+    GPIO.setmode(GPIO.BOARD)
+    
+    
+def sensorCallback(channel):
+  # Called if sensor output changes
+  if GPIO.input(channel):
+    # No magnet
+    print("Garage Door is open")
+  else:
+    # Magnet
+    print("Garage Door is Closed")
+
+def main():
+
+  # Get initial reading
+  sensorCallback(40)
+  getTemperature()
+
+  try:
+    # Loop until users quits with CTRL-C
+    while True :
+      time.sleep(0.1)
+
+  except KeyboardInterrupt:
+    # Reset GPIO settings
+    GPIO.cleanup()
+
+# Tell GPIO library to use GPIO references
+GPIO.setmode(GPIO.BOARD)
+
+# Set Switch GPIO as input
+# Pull high by default
+GPIO.setup(40 , GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(40, GPIO.BOTH, callback=sensorCallback, bouncetime=200)
 
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
+        #setup GPIO once the GUI is opened
+        setupBoard()
+        global garageDoorPin
+        global buzzerPin
         self.title("Garage Door App")
         self.configure(background = '#e1c2b9')
                 
@@ -64,11 +139,11 @@ class App(tk.Tk):
         buttonFrame.pack()
         self.exitButton = tk.Button(buttonFrame, text='    Exit App ', command=self.destroy, relief=tk.RAISED,background = '#e1c2b9',fg="red")
         self.exitButton.grid(row=1,column=1, columnspan = 2, padx = 15, pady = 7,sticky=tk.W)
-        self.testAlarmButton = tk.Button(buttonFrame, text='Test Alarm', relief=tk.RAISED,background = '#e1c2b9',fg="red")
+        self.testAlarmButton = tk.Button(buttonFrame, text='Test Alarm',command =self.alarm, relief=tk.RAISED,background = '#e1c2b9',fg="red")
         self.testAlarmButton.grid(row=1, column=2, columnspan = 1, padx = 5, pady = 7,sticky=tk.W)
-        self.openGarageButton = tk.Button(buttonFrame, text='Open Garage', relief=tk.RAISED,background = '#e1c2b9',fg="red")
+        self.openGarageButton = tk.Button(buttonFrame, text='Open Garage',command =self.openGarageDoor, relief=tk.RAISED,background = '#e1c2b9',fg="red")
         self.openGarageButton.grid(row=2, column=1, columnspan = 1, padx = 5, pady = 7,sticky=tk.W)
-        self.closeGarageButton = tk.Button(buttonFrame, text='Close Garage', relief=tk.RAISED,background = '#e1c2b9',fg="red")
+        self.closeGarageButton = tk.Button(buttonFrame, text='Close Garage', command =self.openGarageDoor, relief=tk.RAISED,background = '#e1c2b9',fg="red")
         self.closeGarageButton.grid(row=2, column=2, columnspan = 1, padx = 5, pady = 7,sticky=tk.E)
         
         self.Temperature.set(getTemperature())
@@ -77,7 +152,28 @@ class App(tk.Tk):
         self.garageState.set(garageDoorStatus())
         self.alarmState.set(getAlarmStatus())
         
+        
+        
+    def openGarageDoor(self):
+        #setupBoard()
+        GPIO.setup(garageDoorPin, GPIO.OUT, initial=GPIO.LOW)
+        GPIO.output(garageDoorPin, GPIO.LOW)
+        GPIO.output(garageDoorPin, GPIO.HIGH)
+        self.after(500)
+        #time.sleep(0.5)
+        GPIO.output(garageDoorPin, GPIO.LOW)
+        
+    def alarm(self):
+        GPIO.setup(buzzerPin, GPIO.OUT, initial=GPIO.HIGH)
+        GPIO.output(buzzerPin, GPIO.HIGH)
+        self.after(500)
+        GPIO.output(buzzerPin, GPIO.LOW)
+        
+     
+              
+        
 if __name__ == "__main__":
     app = App()
     app.mainloop()
+    setupBoard()
     
